@@ -4,12 +4,7 @@ import mongoose from 'mongoose';
 const Schema = mongoose.Schema;
 
 const QuerySchema = new Schema({
-  student: {
-    // store basic student ref (you can store full embedded info to avoid extra lookups)
-    type: Schema.Types.ObjectId,
-    ref: 'User',
-    required: true,
-  },
+  student: { type: String, required: true, index: true },
   studentName: { type: String },
   studentEmail: { type: String },
 
