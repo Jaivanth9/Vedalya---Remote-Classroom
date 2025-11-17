@@ -10,11 +10,13 @@ const router = express.Router();
  * - Auth required
  * - Server derives studentId from req.user (client-sent studentId is ignored)
  */
+// POST /api/queries
 router.post('/', authenticate, async (req, res) => {
   try {
     const user = req.user;
     if (!user) return res.status(401).json({ error: 'Authentication required' });
 
+    // derive canonical id / user identifier from token
     const studentId = String(user._id ?? user.id ?? user.userId);
     const { courseId, courseTitle, subject, message } = req.body || {};
 
@@ -22,23 +24,29 @@ router.post('/', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'Message is required' });
     }
 
-    const q = new Query({
-      studentId,
+    // Create payload matching schema: set 'student' (required) and also set common variants
+    const payload = {
+      student: studentId,         // your schema requires this field
+      studentId,                  // keep backwards-compatible field
+      student_id: studentId,      // another common variant – safe to include
       courseId: courseId ?? null,
       courseTitle: courseTitle ?? null,
       subject: subject ?? null,
       message: message.trim(),
       createdAt: new Date(),
       status: 'open'
-    });
+    };
+
+    const q = new Query(payload);
 
     const saved = await q.save();
     return res.status(201).json(saved);
   } catch (err) {
-    console.error('[POST /api/queries] error', err);
+    console.error('[POST /api/queries] error stack:', err && err.stack ? err.stack : err);
     return res.status(500).json({ error: 'Failed to create query' });
   }
 });
+
 
 /**
  * GET /api/queries
