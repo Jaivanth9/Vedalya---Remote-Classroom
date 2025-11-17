@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { queriesAPI } from "@/lib/api"; // <- fixed import
+import { queriesAPI, authAPI } from "@/lib/api";
 
 interface Props {
   courseId?: string;
@@ -26,7 +26,23 @@ export default function StudentQueryForm({ courseId, courseTitle, onSuccess }: P
     }
     setLoading(true);
     try {
-      await queriesAPI.create({ courseId, courseTitle, subject: subject || undefined, message: message.trim() });
+      // get current user to include studentId (backend expects it)
+      const me = await authAPI.getCurrentUser();
+      const studentId = me?.user?.id || me?.user?._id || me?.user?.userId;
+      if (!studentId) {
+        toast({ title: "Not signed in", description: "Please sign in to submit a query.", variant: "destructive" });
+        setLoading(false);
+        return;
+      }
+
+      await queriesAPI.create({
+        studentId,
+        courseId,
+        courseTitle,
+        subject: subject || undefined,
+        message: message.trim(),
+      });
+
       toast({ title: "Sent", description: "Your query was submitted." });
       setSubject("");
       setMessage("");
