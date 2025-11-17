@@ -1,65 +1,73 @@
 // server/routes/queries.js
 import express from 'express';
-import Query from '../models/Query.js'; // ensure Query model exports default
+import { authenticate } from '../middleware/auth.js';
+import Query from '../models/Query.js'; // adjust path if your model lives elsewhere
 
 const router = express.Router();
 
-router.get('/', async (req, res) => {
+/**
+ * POST /api/queries
+ * - Auth required
+ * - Server derives studentId from req.user (client-sent studentId is ignored)
+ */
+router.post('/', authenticate, async (req, res) => {
   try {
-    const { student, course } = req.query;
-    const filter = {};
-    if (student) filter.student = student;
-    if (course) filter.course = course;
+    const user = req.user;
+    if (!user) return res.status(401).json({ error: 'Authentication required' });
 
-    const queries = await Query.find(filter).sort({ createdAt: -1 }).lean();
-    res.json(queries);
-  } catch (err) {
-    console.error('GET /api/queries error', err);
-    res.status(500).json({ error: 'Failed to fetch queries' });
-  }
-});
+    const studentId = String(user._id ?? user.id ?? user.userId);
+    const { courseId, courseTitle, subject, message } = req.body || {};
 
-router.post('/', async (req, res) => {
-  try {
-    const { studentId, studentName, studentEmail, courseId, courseTitle, subject, message } = req.body;
-    if (!studentId || !message) {
-      return res.status(400).json({ error: 'Missing required fields (studentId & message)' });
+    if (!message || !message.trim()) {
+      return res.status(400).json({ error: 'Message is required' });
     }
 
     const q = new Query({
-      student: studentId,
-      studentName: studentName || '',
-      studentEmail: studentEmail || '',
-      course: courseId || null,
-      courseTitle: courseTitle || '',
-      subject: subject || '',
-      message,
+      studentId,
+      courseId: courseId ?? null,
+      courseTitle: courseTitle ?? null,
+      subject: subject ?? null,
+      message: message.trim(),
+      createdAt: new Date(),
+      status: 'open'
     });
 
     const saved = await q.save();
-    res.status(201).json(saved);
+    return res.status(201).json(saved);
   } catch (err) {
-    console.error('POST /api/queries error', err);
-    res.status(500).json({ error: 'Failed to create query' });
+    console.error('[POST /api/queries] error', err);
+    return res.status(500).json({ error: 'Failed to create query' });
   }
 });
 
-router.put('/:id', async (req, res) => {
+/**
+ * GET /api/queries
+ * - Auth required
+ * - Students see only their queries; teacher/admin can see all
+ */
+router.get('/', authenticate, async (req, res) => {
   try {
-    const { id } = req.params;
-    const updates = {};
-    if (req.body.reply !== undefined) updates.reply = req.body.reply;
-    if (req.body.status !== undefined) updates.status = req.body.status;
+    const user = req.user;
+    if (!user) return res.status(401).json({ error: 'Authentication required' });
 
-    updates.updatedAt = Date.now();
+    const role = String(user.role || user.userRole || 'student').toLowerCase();
+    const isTeacherOrAdmin = ['teacher', 'admin'].includes(role);
 
-    const updated = await Query.findByIdAndUpdate(id, updates, { new: true }).lean();
-    if (!updated) return res.status(404).json({ error: 'Query not found' });
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, parseInt(req.query.limit) || 25);
+    const skip = (page - 1) * limit;
 
-    res.json(updated);
+    const filter = isTeacherOrAdmin ? {} : { studentId: String(user._id ?? user.id ?? user.userId) };
+
+    const [items, total] = await Promise.all([
+      Query.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+      Query.countDocuments(filter)
+    ]);
+
+    return res.json({ items, total, page, limit });
   } catch (err) {
-    console.error('PUT /api/queries/:id error', err);
-    res.status(500).json({ error: 'Failed to update query' });
+    console.error('[GET /api/queries] error', err);
+    return res.status(500).json({ error: 'Failed to fetch queries' });
   }
 });
 
