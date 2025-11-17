@@ -27,7 +27,36 @@ process.on('unhandledRejection', (reason) => {
 });
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: (origin, callback) => {
+    // Debugging: log incoming origin so you can see what the browser sends
+    // eslint-disable-next-line no-console
+    console.debug('[CORS] incoming origin:', origin);
+
+    // allow requests with no origin (e.g. curl, server-to-server)
+    if (!origin) return callback(null, true);
+
+    const allowedOrigins = [
+      'http://localhost:8080',
+      'http://localhost:5173',
+      'https://vedalya-remote-classroom.vercel.app',
+      'https://vedalya-remote-classroom-pzt2.onrender.com'
+    ];
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    // not allowed
+    return callback(new Error(`CORS policy: origin ${origin} is not permitted`));
+  },
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  methods: ['GET','POST','PUT','DELETE','OPTIONS'],
+  optionsSuccessStatus: 204
+}));
+
+
 app.use(express.json()); // parse JSON bodies
 
 // MongoDB connection
