@@ -407,31 +407,45 @@ const fetchAssignments = async () => {
   };
 
   // --- Queries API helpers (NEW) -------------------
-  const fetchMyQueries = async () => {
-    if (!user) return;
-    try {
-      setQueryLoading(true);
-      const all = Array.isArray(await queriesAPI.getAll()) ? await queriesAPI.getAll() : [];
-      const myId = user?.id ?? user?._id ?? user?.userId;
-      const mine = (all || []).filter((q: any) => {
-        const qStudent = q.student ?? q.studentId ?? q.student_id ?? (q.student && (q.student._id ?? q.student.id)) ?? null;
+  // replace your existing fetchMyQueries with this
+const fetchMyQueries = async () => {
+  if (!user) return;
+  try {
+    setQueryLoading(true);
+
+    // single request -> backend may return either an array or { items, total, ... }
+    const resp = await queriesAPI.getAll({ page: '1', limit: '50' }); // optional paging
+    const all = Array.isArray(resp) ? resp : (resp?.items ?? []);
+
+    const myId = String(user?.id ?? user?._id ?? user?.userId ?? '');
+
+    const mine = (all || [])
+      .filter((q: any) => {
+        const qStudent =
+          q.student ??
+          q.studentId ??
+          q.student_id ??
+          (q.student && (q.student._id ?? q.student.id)) ??
+          null;
         if (!qStudent) return false;
-        if (typeof qStudent === "object") return String(qStudent._id ?? qStudent.id) === String(myId);
-        return String(qStudent) === String(myId);
-      }).sort((a: any, b: any) => {
+        if (typeof qStudent === 'object') return String(qStudent._id ?? qStudent.id) === myId;
+        return String(qStudent) === myId;
+      })
+      .sort((a: any, b: any) => {
         const ta = new Date(a.createdAt ?? a.created_at ?? a.created ?? 0).getTime();
         const tb = new Date(b.createdAt ?? b.created_at ?? b.created ?? 0).getTime();
         return tb - ta;
       });
 
-      setMyQueries(mine);
-    } catch (err: any) {
-      console.error("fetchMyQueries error", err);
-      setMyQueries([]);
-    } finally {
-      setQueryLoading(false);
-    }
-  };
+    setMyQueries(mine);
+  } catch (err: any) {
+    console.error('fetchMyQueries error', err);
+    setMyQueries([]);
+  } finally {
+    setQueryLoading(false);
+  }
+};
+
 
   const submitQuery = async () => {
     if (!user) {
@@ -442,9 +456,10 @@ const fetchAssignments = async () => {
       toast({ title: "Empty question", description: "Please write your question before submitting", variant: "destructive" });
       return;
     }
-
+  
     try {
       const payload: any = {
+        // optional: backend should derive student from token; keep fields compatible
         student: user?.id ?? user?._id ?? user?.userId,
         studentName: user?.fullName ?? user?.name ?? null,
         course: selectedCourseForQuery || null,
@@ -453,17 +468,32 @@ const fetchAssignments = async () => {
         status: "open",
         createdAt: new Date().toISOString(),
       };
-
-      await queriesAPI.create(payload);
+  
+      // create on server and capture returned saved document
+      const saved = await queriesAPI.create(payload);
+  
+      // optimistic update: prepend returned item (if server returned it)
+      if (saved) {
+        setMyQueries(prev => {
+          // avoid duplicates by _id
+          const id = saved._id ?? saved.id;
+          const filtered = (prev || []).filter((q: any) => String(q._id ?? q.id) !== String(id));
+          return [saved, ...filtered];
+        });
+      } else {
+        // fallback: refetch if server didn't return saved doc
+        await fetchMyQueries();
+      }
+  
       toast({ title: "Submitted", description: "Your question was submitted to the teacher." });
       setQueryText("");
       setSelectedCourseForQuery("");
-      fetchMyQueries();
     } catch (err: any) {
       console.error("submitQuery error", err);
       toast({ title: "Error", description: "Failed to submit question", variant: "destructive" });
     }
   };
+  
   // -------------------------------------------------
 
   const isEnrolled = (courseId: string) => {
