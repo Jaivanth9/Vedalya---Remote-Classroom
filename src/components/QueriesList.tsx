@@ -7,7 +7,7 @@ import { format } from "date-fns";
 
 type QueryItem = any;
 
-export function QueriesList({ queries = [], onRefetch }: { queries?: QueryItem[]; onRefetch?: () => void }) {
+export function QueriesList({ queries = [], onRefetch }: { queries?: QueryItem[] | any; onRefetch?: () => void }) {
   const [answeringId, setAnsweringId] = useState<string | null>(null);
   const [answerText, setAnswerText] = useState("");
   const { toast } = useToast();
@@ -42,7 +42,7 @@ export function QueriesList({ queries = [], onRefetch }: { queries?: QueryItem[]
 
   const startAnswer = (q: QueryItem) => {
     setAnsweringId(q._id ?? q.id);
-    setAnswerText(q.answer ?? q.reply ?? "");
+    setAnswerText(q.reply ?? q.answer ?? "");
   };
 
   const cancelAnswer = () => {
@@ -57,8 +57,8 @@ export function QueriesList({ queries = [], onRefetch }: { queries?: QueryItem[]
       return;
     }
     try {
-      // adjust field name if your server expects `reply` instead of `answer`
-      await queriesAPI.update(answeringId, { answer: answerText.trim(), status: "answered" });
+      // Use 'reply' and 'status: "responded"' to match the server handlers used elsewhere
+      await queriesAPI.update(answeringId, { reply: answerText.trim(), status: "responded" });
       toast({ title: "Saved", description: "Answer saved." });
       setAnsweringId(null);
       setAnswerText("");
@@ -72,7 +72,8 @@ export function QueriesList({ queries = [], onRefetch }: { queries?: QueryItem[]
     }
   };
 
-  const list = Array.isArray(queries) ? queries : [];
+  // normalize incoming prop: support either array or { items, ... }
+  const list = Array.isArray(queries) ? queries : (queries?.items ?? []);
 
   return (
     <div className="space-y-3">
@@ -80,9 +81,9 @@ export function QueriesList({ queries = [], onRefetch }: { queries?: QueryItem[]
         list.map((q: QueryItem) => {
           const id = q._id ?? q.id ?? JSON.stringify(q);
           const isAnswering = answeringId === id;
-          const answered = q.status === "answered" || !!q.answer || !!q.reply;
+          const answered = (q.status && (String(q.status).toLowerCase() === "responded" || String(q.status).toLowerCase() === "resolved")) || !!q.reply;
 
-          const studentLabel = q.studentName ?? (q.student && (q.student.fullName ?? q.student.name)) ?? String(q.studentId ?? "").slice(0, 8) ?? "Student";
+          const studentLabel = q.studentName ?? (q.student && (q.student.fullName ?? q.student.name)) ?? String(q.studentId ?? q.student ?? "").slice(0, 8) ?? "Student";
           const courseLabel = q.courseTitle ?? q.course ?? "General";
           const message = q.message ?? q.query ?? q.text ?? "";
           const createdRaw = q.createdAt ?? q.created_at ?? q.created ?? q.timestamp ?? null;
@@ -98,10 +99,10 @@ export function QueriesList({ queries = [], onRefetch }: { queries?: QueryItem[]
                   </div>
                   <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">{message}</p>
 
-                  {(q.answer || q.reply) && (
+                  {(q.reply) && (
                     <div className="mt-2 p-2 bg-muted/20 rounded text-sm">
                       <strong>Answer:</strong>
-                      <div className="whitespace-pre-wrap">{q.answer ?? q.reply}</div>
+                      <div className="whitespace-pre-wrap">{q.reply}</div>
                     </div>
                   )}
 

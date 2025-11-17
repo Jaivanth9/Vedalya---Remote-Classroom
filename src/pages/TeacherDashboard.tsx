@@ -135,7 +135,12 @@ export default function TeacherDashboard() {
       if (submissionsRes.status === "fulfilled") setSubmissions(Array.isArray(submissionsRes.value) ? submissionsRes.value : []);
       if (classesRes.status === "fulfilled") setClasses(Array.isArray(classesRes.value) ? classesRes.value : []);
       if (enrollmentsRes.status === "fulfilled") setEnrollments(Array.isArray(enrollmentsRes.value) ? enrollmentsRes.value : []);
-      if (queriesRes.status === "fulfilled") setQueries(Array.isArray(queriesRes.value) ? queriesRes.value : []);
+      if (queriesRes.status === "fulfilled") {
+        const q = queriesRes.value;
+        const list = Array.isArray(q) ? q : (q?.items ?? []);
+        setQueries(list);
+      }
+      
     } catch (err: any) {
       // log only — don't spam toasts during polling
       console.error("fetchDashboardRealtime error", err);
@@ -176,13 +181,15 @@ export default function TeacherDashboard() {
   // fetch teacher queries (used in dashboard card)
   const fetchQueries = async () => {
     try {
-      const data = await queriesAPI.getAll(); // optional: pass filters like { status: 'open' }
-      setQueries(Array.isArray(data) ? data : []);
+      const data = await queriesAPI.getAll();
+      const list = Array.isArray(data) ? data : (data?.items ?? []);
+      setQueries(list);
     } catch (err: any) {
       console.error("fetchQueries error", err);
       setQueries([]);
     }
   };
+  
 
   const fetchClasses = async () => {
     if (!user) return;
