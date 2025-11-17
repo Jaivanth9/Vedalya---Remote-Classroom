@@ -1,0 +1,153 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 220 15% 20%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 15% 20%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 15% 20%;
+
+    --primary: 210 100% 50%;
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 210 100% 45%;
+
+    --secondary: 142 76% 36%;
+    --secondary-foreground: 0 0% 100%;
+    --secondary-hover: 142 76% 31%;
+
+    --accent: 24 100% 50%;
+    --accent-foreground: 0 0% 100%;
+    --accent-hover: 24 100% 45%;
+
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215 16.3% 46.9%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 31.8% 91.4%;
+    --input: 214 31.8% 91.4%;
+    --ring: 210 100% 50%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 220 15% 20%;
+    --sidebar-primary: 210 100% 50%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 40% 96.1%;
+    --sidebar-accent-foreground: 220 15% 20%;
+    --sidebar-border: 214 31.8% 91.4%;
+    --sidebar-ring: 210 100% 50%;
+
+    /* Educational Theme Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(210, 100%, 50%), hsl(200, 100%, 45%));
+    --gradient-secondary: linear-gradient(135deg, hsl(142, 76%, 36%), hsl(152, 76%, 41%));
+    --gradient-hero: linear-gradient(135deg, hsl(210, 100%, 50%) 0%, hsl(142, 76%, 36%) 100%);
+    --gradient-accent: linear-gradient(135deg, hsl(24, 100%, 50%), hsl(34, 100%, 55%));
+    --gradient-card: linear-gradient(180deg, hsl(0, 0%, 100%) 0%, hsl(210, 40%, 98%) 100%);
+    
+    /* Shadows */
+    --shadow-sm: 0 1px 2px 0 hsl(210 100% 50% / 0.05);
+    --shadow-md: 0 4px 6px -1px hsl(210 100% 50% / 0.1);
+    --shadow-lg: 0 10px 15px -3px hsl(210 100% 50% / 0.1);
+    --shadow-xl: 0 20px 25px -5px hsl(210 100% 50% / 0.15);
+    --shadow-card: 0 2px 8px hsl(210 40% 50% / 0.08);
+    --shadow-card-hover: 0 8px 24px hsl(210 100% 50% / 0.15);
+    --shadow-glow: 0 0 20px hsl(210 100% 50% / 0.3);
+
+    /* Animation */
+    --transition-base: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-smooth: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-bounce: all 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+  }
+
+  .dark {
+    --background: 220 20% 12%;
+    --foreground: 210 40% 98%;
+
+    --card: 220 20% 15%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 220 20% 15%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 210 100% 55%;
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 210 100% 60%;
+
+    --secondary: 142 70% 40%;
+    --secondary-foreground: 0 0% 100%;
+    --secondary-hover: 142 70% 45%;
+
+    --accent: 24 100% 55%;
+    --accent-foreground: 0 0% 100%;
+    --accent-hover: 24 100% 60%;
+
+    --muted: 220 20% 20%;
+    --muted-foreground: 215 20% 65%;
+
+    --destructive: 0 62.8% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 20% 25%;
+    --input: 220 20% 25%;
+    --ring: 210 100% 55%;
+
+    --sidebar-background: 220 20% 10%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 210 100% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 20% 20%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 220 20% 25%;
+    --sidebar-ring: 210 100% 55%;
+
+    --gradient-primary: linear-gradient(135deg, hsl(210, 100%, 55%), hsl(200, 100%, 50%));
+    --gradient-secondary: linear-gradient(135deg, hsl(142, 70%, 40%), hsl(152, 70%, 45%));
+    --gradient-hero: linear-gradient(135deg, hsl(210, 100%, 55%) 0%, hsl(142, 70%, 40%) 100%);
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-muted;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-primary/50 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-primary;
+  }
+}

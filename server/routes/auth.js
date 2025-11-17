@@ -1,0 +1,159 @@
+import express from 'express';
+import jwt from 'jsonwebtoken';
+import User from '../models/User.js';
+import { authenticate } from '../middleware/auth.js';
+
+const router = express.Router();
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+
+// Sign up
+router.post('/signup', async (req, res) => {
+  try {
+    const { email, password, fullName, role } = req.body;
+
+    if (!email || !password || !fullName || !role) {
+      return res.status(400).json({ error: 'All fields are required' });
+    }
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ error: 'User already exists' });
+    }
+
+    // Create new user
+    const user = new User({
+      email,
+      password,
+      fullName,
+      role: role || 'student'
+    });
+
+    await user.save();
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { userId: user._id, email: user.email, role: user.role },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.status(201).json({
+      user: {
+        id: user._id,
+        email: user.email,
+        fullName: user.fullName,
+        role: user.role
+      },
+      token
+    });
+  } catch (error) {
+    console.error('Signup error:', error);
+    res.status(500).json({ error: 'Failed to create account' });
+  }
+});
+
+// Sign in
+router.post('/signin', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    // Find user
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // Check password
+    const isMatch = await user.comparePassword(password);
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { userId: user._id, email: user.email, role: user.role },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    res.json({
+      user: {
+        id: user._id,
+        email: user.email,
+        fullName: user.fullName,
+        role: user.role
+      },
+      token
+    });
+  } catch (error) {
+    console.error('Signin error:', error);
+    res.status(500).json({ error: 'Failed to sign in' });
+  }
+});
+
+// Get current user
+router.get('/me', authenticate, async (req, res) => {
+  try {
+    res.json({
+      user: {
+        id: req.user._id,
+        email: req.user.email,
+        fullName: req.user.fullName,
+        role: req.user.role,
+        avatarUrl: req.user.avatarUrl
+      }
+    });
+  } catch (error) {
+    console.error('Get user error:', error);
+    res.status(500).json({ error: 'Failed to get user' });
+  }
+});
+
+// Sign out (client-side token removal, but we can add token blacklisting here if needed)
+router.post('/signout', authenticate, (req, res) => {
+  res.json({ message: 'Signed out successfully' });
+});
+
+// Update user role
+router.put('/role', authenticate, async (req, res) => {
+  try {
+    const { role } = req.body;
+
+    if (!role || !['student', 'teacher', 'admin'].includes(role)) {
+      return res.status(400).json({ error: 'Invalid role' });
+    }
+
+    req.user.role = role;
+    await req.user.save();
+
+    res.json({
+      user: {
+        id: req.user._id,
+        email: req.user.email,
+        fullName: req.user.fullName,
+        role: req.user.role
+      }
+    });
+  } catch (error) {
+    console.error('Update role error:', error);
+    res.status(500).json({ error: 'Failed to update role' });
+  }
+});
+
+// Get user role
+router.get('/role', authenticate, async (req, res) => {
+  try {
+    res.json({ role: req.user.role });
+  } catch (error) {
+    console.error('Get role error:', error);
+    res.status(500).json({ error: 'Failed to get role' });
+  }
+});
+
+export default router;
+
