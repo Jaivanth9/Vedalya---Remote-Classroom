@@ -107,8 +107,7 @@ router.get('/conversations/:conversationId/messages', authenticate, async (req, 
 /* -------------------------
    Assistant (calls Gemini)
    ------------------------- */
-
-// server/routes/chat.js  (replace /assistant handler with the snippet below)
+// Replace your existing router.post('/assistant', ...) with this block
 router.post('/assistant', authenticate, async (req, res) => {
   try {
     const { messages } = req.body || {};
@@ -123,60 +122,151 @@ router.post('/assistant', authenticate, async (req, res) => {
       return res.status(400).json({ error: 'Invalid payload: messages must be an array' });
     }
 
-    // ensure model path (no "models/" duplication)
-    if (!GEMINI_MODEL.startsWith('models/')) GEMINI_MODEL = `models/${GEMINI_MODEL}`;
+    // Helper to normalize/validate roles for Gemini (Gemini only accepts 'user' and 'model')
+    const normalizeRole = (role) => {
+      if (!role) return 'user';
+      const r = String(role).toLowerCase();
+      if (r === 'user') return 'user';
+      // Map assistant/system/anything else to model
+      if (r === 'assistant' || r === 'system' || r === 'model') return 'model';
+      // default fallback
+      return 'model';
+    };
 
-    // build contents array expected by generateContent
-    const contents = messages.map(m => ({
-      role: m.role || 'user',
-      parts: [{ text: m.content ?? '' }]
-    }));
-
-    // you can prepend a system message if you want:
-    contents.unshift({
-      role: 'system',
-      parts: [{ text: 'You are Akalya Assistant, a helpful AI tutor. Be friendly and concise.' }]
+    // Build contents array expected by generateContent
+    const contents = messages.map((m) => {
+      const role = normalizeRole(m.role);
+      return { role, parts: [{ text: String(m.content ?? '') }] };
     });
 
-    const url = `https://generativelanguage.googleapis.com/v1/${GEMINI_MODEL}:generateContent`;
-    const body = {
-      contents,
-      generationConfig: {
-        temperature: 0.2,
-        maxOutputTokens: 800
+    // Prepend an instruction/identity as a model role (not 'system')
+    contents.unshift({
+      role: 'model',
+      parts: [{ text: 'You are Akalya Assistant, a helpful AI tutor. Be friendly and concise.' }],
+    });
+
+    // Optional: debug log the payload being sent to Gemini (trim large texts)
+    console.debug('[assistant] sending contents to Gemini:', contents.map(c => ({
+      role: c.role,
+      text: (c.parts && c.parts[0] && String(c.parts[0].text || '')).slice(0, 200)
+    })));
+
+    // Build request body
+    const url = `https://generativelanguage.googleapis.com/v1/${GEMINI_MODEL.startsWith('models/') ? GEMINI_MODEL : `models/${GEMINI_MODEL}`}:generateContent`;
+    const body = { contents, generationConfig: { temperature: 0.2, maxOutputTokens: 800 } };
+
+    // helper: fetch with timeout and single retry (keeps your previous logic)
+    const fetchWithTimeoutAndRetry = async (url, options, timeoutMs = 20000, retries = 1) => {
+      const attempt = async () => {
+        const controller = new AbortController();
+        const id = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          const resp = await fetch(url, { ...options, signal: controller.signal });
+          clearTimeout(id);
+          return resp;
+        } catch (err) {
+          clearTimeout(id);
+          throw err;
+        }
+      };
+
+      try {
+        return await attempt();
+      } catch (err) {
+        if (retries > 0) {
+          await new Promise((r) => setTimeout(r, 500));
+          return await fetchWithTimeoutAndRetry(url, options, timeoutMs, retries - 1);
+        }
+        throw err;
       }
     };
 
-    const apiResp = await fetch(url, {
+    const options = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-goog-api-key': GEMINI_API_KEY
       },
       body: JSON.stringify(body),
-    });
+    };
+
+    let apiResp;
+    try {
+      apiResp = await fetchWithTimeoutAndRetry(url, options, 20000, 1);
+    } catch (err) {
+      console.error('[chat assistant] network/gateway error calling Gemini:', err);
+      return res.status(502).json({ error: 'Model is under training, we will let you know after integration' });
+    }
 
     const providerText = await apiResp.text().catch(() => '');
 
     if (!apiResp.ok) {
-      console.error('[Gemini] non-OK', apiResp.status, providerText.slice(0, 2000));
+      // Log provider response (server logs only)
+      console.error('[Gemini] non-OK', apiResp.status, providerText.slice(0, 4000));
+      // Return a sanitized error to client (avoid leaking providerBody)
       return res.status(502).json({ error: 'AI gateway error', providerStatus: apiResp.status, providerBody: providerText });
     }
 
-    const providerJson = JSON.parse(providerText || '{}');
+    // parse provider JSON (best-effort)
+    let providerJson;
+    try {
+      providerJson = JSON.parse(providerText || '{}');
+    } catch (err) {
+      providerJson = providerText;
+    }
 
-    // best-effort extraction of model text
+    // Extract assistant text from common shapes
     const assistantText =
-      providerJson?.candidates?.[0]?.content ??
+      providerJson?.candidates?.[0]?.content?.parts?.[0]?.text ??
       providerJson?.output?.[0]?.content?.[0]?.text ??
       (typeof providerJson === 'string' ? providerJson : JSON.stringify(providerJson));
 
-    return res.json({ message: assistantText, raw: providerJson });
+    const finalText = assistantText && String(assistantText).trim()
+      ? String(assistantText)
+      : "Sorry — the AI returned no usable response. Please try again later.";
+
+    // Return normalized response (message + raw for logs or client debugging)
+    return res.json({ message: finalText, raw: providerJson });
   } catch (error) {
     console.error('Chat assistant error:', error);
     return res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
   }
 });
+
+// DEV ONLY — preview how server will format contents for Gemini
+// Add this block to server/routes/chat.js (then deploy/restart server)
+router.post('/assistant/preview-contents', async (req, res) => {
+  try {
+    const { messages } = req.body || {};
+    if (!Array.isArray(messages)) return res.status(400).json({ error: 'messages must be an array' });
+
+    const normalizeRole = (role) => {
+      if (!role) return 'user';
+      const r = String(role).toLowerCase();
+      if (r === 'user') return 'user';
+      if (r === 'assistant' || r === 'system' || r === 'model') return 'model';
+      return 'model';
+    };
+
+    const contents = messages.map((m) => ({
+      role: normalizeRole(m.role),
+      parts: [{ text: String(m.content ?? '') }],
+    }));
+
+    // Prepend assistant identity/instruction
+    contents.unshift({
+      role: 'model',
+      parts: [{ text: 'You are Akalya Assistant, a helpful AI tutor. Be friendly and concise.' }],
+    });
+
+    // For debugging only — remove or restrict later
+    return res.json({ ok: true, contents });
+  } catch (err) {
+    console.error('preview-contents error:', err);
+    return res.status(500).json({ error: String(err) });
+  }
+});
+
 
 
 /* -------------------------

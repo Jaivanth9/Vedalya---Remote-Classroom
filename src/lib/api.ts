@@ -453,48 +453,66 @@ export const chatAPI = {
     });
   },
 
-  chatAssistant: async (messages: Array<{ role: string; content: string }>) => {
-    try {
-      const data: any = await apiFetch('/chat/assistant', {
-        method: 'POST',
-        body: JSON.stringify({ messages }),
-      });
+  // src/lib/api.ts  (replace chatAssistant)
+// replace the existing chatAssistant function with this
+chatAssistant: async (messages: Array<{ role: string; content: string }>) => {
+  try {
+    const data: any = await apiFetch('/chat/assistant', {
+      method: 'POST',
+      body: JSON.stringify({ messages }),
+    });
 
-      // normalize a few common shapes, but just return `data` if you want:
-      if (!data) return { message: '' };
+    // If backend returned nothing, provide a default empty message
+    if (!data) return { message: '', raw: data };
 
-      if (typeof data === 'string') {
-        return { message: data, raw: data };
-      }
-
-      if (data.message || data.text || data.answer || data.content) {
-        return {
-          message: data.message ?? data.text ?? data.answer ?? data.content,
-          raw: data,
-        };
-      }
-
-      if (Array.isArray(data.choices) && data.choices[0]) {
-        const c = data.choices[0];
-        const content =
-          (c.message && (c.message.content || c.message.text)) ||
-          c.text ||
-          (typeof c === 'string' ? c : undefined);
-
-        return {
-          message: content ?? JSON.stringify(data),
-          raw: data,
-        };
-      }
-
-      // fallback
-      return { message: JSON.stringify(data), raw: data };
-    } catch (err) {
-      // apiFetch already put the server error message in err.message
-      console.error('[chatAPI.chatAssistant] error:', err);
-      throw err;
+    // If backend already returned normalized { message, raw } keep it
+    if (typeof data === 'object' && (data.message || data.raw)) {
+      // ensure message is string
+      return { message: String(data.message ?? ''), raw: data.raw ?? data };
     }
-  },
+
+    // If backend returned a simple string
+    if (typeof data === 'string') {
+      return { message: data, raw: data };
+    }
+
+    // Common shapes:
+    if (data.message && typeof data.message === 'string') {
+      return { message: data.message, raw: data };
+    }
+    if (data.text && typeof data.text === 'string') {
+      return { message: data.text, raw: data };
+    }
+    if (data.answer && typeof data.answer === 'string') {
+      return { message: data.answer, raw: data };
+    }
+
+    // OpenAI-like: { choices: [ { message: { content: "..." } } ] }
+    if (Array.isArray(data.choices) && data.choices[0]) {
+      const c = data.choices[0];
+      const content = (c.message && (c.message.content || c.message.text)) || c.text || (typeof c === 'string' ? c : '');
+      return { message: String(content ?? ''), raw: data };
+    }
+
+    // As a last resort, try to extract plain text from nested output/candidates
+    const fallback =
+      (data.output && data.output[0] && data.output[0].content && data.output[0].content[0] && data.output[0].content[0].text) ||
+      (data.candidates && data.candidates[0] && data.candidates[0].content) ||
+      null;
+
+    if (fallback) return { message: String(fallback), raw: data };
+
+    // Final fallback: stringify the entire object (kept small)
+    try {
+      return { message: JSON.stringify(data).slice(0, 4000), raw: data };
+    } catch {
+      return { message: '', raw: data };
+    }
+  } catch (err) {
+    console.error('[chatAPI.chatAssistant] error:', err);
+    throw err; // apiFetch already wraps errors with message/status
+  }
+},
 };
 
 /* -------------------------
